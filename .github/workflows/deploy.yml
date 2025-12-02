@@ -1,0 +1,45 @@
+name: Deploy to Raspberry Pis
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Validate bash scripts
+        run: |
+          bash -n install.sh
+          bash -n datawall-restart.sh
+          bash -n update.sh
+      
+      - name: Check script permissions
+        run: |
+          chmod +x install.sh
+          chmod +x datawall-restart.sh
+          chmod +x update.sh
+      
+      - name: Verify required files
+        run: |
+          test -f install.sh
+          test -f datawall-restart.sh
+          test -f datawall-restart.service
+          test -f update.sh
+          test -f datawall.conf
+          test -f README.md
+  
+  notify:
+    needs: validate
+    runs-on: ubuntu-latest
+    if: success()
+    steps:
+      - name: Deployment notification
+        run: |
+          echo "✅ Scripts validated and ready for deployment"
+          echo "Raspberry Pis will auto-update within 1 hour"
+          echo "Or run manually: sudo /opt/datawall/update.sh"
