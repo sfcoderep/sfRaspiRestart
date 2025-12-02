@@ -5,9 +5,9 @@ Wants=graphical.target network-online.target
 
 [Service]
 Type=simple
-User=pi
+User=admin
 Environment="DISPLAY=:0"
-Environment="XAUTHORITY=/home/pi/.Xauthority"
+Environment="XAUTHORITY=/home/admin/.Xauthority"
 ExecStart=/opt/datawall/datawall-restart.sh
 Restart=always
 RestartSec=10

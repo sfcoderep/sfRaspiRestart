@@ -24,7 +24,14 @@ log_message() {
 
 setup_display() {
     export DISPLAY=:0
-    export XAUTHORITY=/home/pi/.Xauthority
+    # Detect username automatically
+    if [ -f /home/admin/.Xauthority ]; then
+        export XAUTHORITY=/home/admin/.Xauthority
+    elif [ -f /home/pi/.Xauthority ]; then
+        export XAUTHORITY=/home/pi/.Xauthority
+    else
+        export XAUTHORITY=$HOME/.Xauthority
+    fi
 }
 
 kill_firefox() {
