@@ -47,6 +47,11 @@ echo "Installing dependencies..."
 apt-get update
 apt-get install -y firefox-esr xdotool unclutter
 
+# Setup reboot permissions
+echo "Setting up reboot permissions..."
+echo "admin ALL=(ALL) NOPASSWD: /usr/sbin/reboot" > /etc/sudoers.d/datawall-reboot
+chmod 440 /etc/sudoers.d/datawall-reboot
+
 # Setup auto-update cron job (checks every hour)
 echo "Setting up automatic updates..."
 CRON_JOB="0 * * * * $INSTALL_DIR/update.sh >> /var/log/datawall-update.log 2>&1"
