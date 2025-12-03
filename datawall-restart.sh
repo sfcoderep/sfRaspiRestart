@@ -194,7 +194,10 @@ main() {
     log_message "Dashboard selection: Button $DASHBOARD_SELECTION"
     
     # On first start, launch Firefox immediately
-    sleep 60
+    while ! xdotool getdisplaygeometry &>/dev/null; do
+        echo "Waiting for X server..."
+        sleep 2
+    done
     setup_display
     sleep 10
     start_firefox
