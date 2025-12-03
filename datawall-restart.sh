@@ -84,16 +84,41 @@ start_firefox() {
     firefox --kiosk "$DASHBOARD_URL" &
     FIREFOX_PID=$!
     
-    sleep 5
+    log_message "Firefox started (PID: $FIREFOX_PID), waiting for window to appear..."
+    
+    # Wait for Firefox window to appear (up to 10 seconds)
+    for i in {1..20}; do
+        if xdotool search --name "Firefox" > /dev/null 2>&1; then
+            log_message "Firefox window detected after $i seconds"
+            break
+        fi
+        sleep 0.5
+    done
+    
+    sleep 2
+    
+    # Get Firefox window ID
+    FIREFOX_WINDOW=$(xdotool search --name "Firefox" | head -1)
+    
+    if [ -n "$FIREFOX_WINDOW" ]; then
+        log_message "Firefox window ID: $FIREFOX_WINDOW"
+        
+        # Maximize and make fullscreen
+        xdotool windowactivate "$FIREFOX_WINDOW"
+        sleep 1
+        xdotool windowsize "$FIREFOX_WINDOW" 100% 100%
+        sleep 1
+        xdotool key --window "$FIREFOX_WINDOW" F11
+        sleep 1
+        xdotool key --window "$FIREFOX_WINDOW" F11
+        
+        log_message "Firefox maximized and set to fullscreen"
+    else
+        log_message "Warning: Could not find Firefox window"
+    fi
     
     # Hide cursor
     unclutter -idle 0.1 -root &
-    
-    # Make Firefox fullscreen
-    sleep 2
-    xdotool key F11
-    
-    log_message "Firefox started (PID: $FIREFOX_PID)"
     
     # Auto-click the dashboard button
     click_dashboard_button
