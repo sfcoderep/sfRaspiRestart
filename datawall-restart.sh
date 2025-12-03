@@ -192,16 +192,29 @@ main() {
     log_message "Datawall restart service started"
     log_message "Restart interval: $RESTART_INTERVAL"
     log_message "Dashboard selection: Button $DASHBOARD_SELECTION"
-    
-    # On first start, launch Firefox immediately
+
     setup_display
     sleep 5
+
+    # Counter for first-run logic
+    firstRunCounter=1
+
+    # Launch Firefox the first time
     start_firefox
-    sudo systemctl restart datawall-restart
-    
+
+    # If this is the first run, kill and restart Firefox
+    if [ "$firstRunCounter" -eq 1 ]; then
+        log_message "First-run dumb restart: killing Firefox and starting again"
+        kill_firefox
+        sleep 2
+        start_firefox
+        firstRunCounter=$((firstRunCounter + 1))
+    fi
+
+    # Convert interval to seconds
     SLEEP_SECONDS=$(parse_interval "$RESTART_INTERVAL")
-    
-    # Wait for the interval, then reboot
+
+    # Main loop: wait interval then reboot
     while true; do
         log_message "Next system reboot in $RESTART_INTERVAL"
         sleep "$SLEEP_SECONDS"
@@ -210,3 +223,4 @@ main() {
 }
 
 main
+
