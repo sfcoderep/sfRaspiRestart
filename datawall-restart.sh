@@ -194,7 +194,7 @@ main() {
     log_message "Dashboard selection: Button $DASHBOARD_SELECTION"
     
     # On first start, launch Firefox immediately
-    sleep 10
+    sleep 60
     setup_display
     sleep 10
     start_firefox
