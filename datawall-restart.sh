@@ -164,10 +164,10 @@ start_firefox() {
 
 restart_cycle() {
     log_message "Starting restart cycle - will reboot system in 15 seconds"
-    
-    # Give time for log to be written
+
+    # Give logs a chance to flush
     sleep 15
-    
+
     # Reboot the Raspberry Pi
     log_message "Rebooting Raspberry Pi now..."
     sudo reboot
@@ -192,19 +192,21 @@ main() {
     log_message "Datawall restart service started"
     log_message "Restart interval: $RESTART_INTERVAL"
     log_message "Dashboard selection: Button $DASHBOARD_SELECTION"
-    
-    # On first start, launch Firefox immediately
+
+    # Wait until X server is ready before starting Firefox
     while ! xdotool getdisplaygeometry &>/dev/null; do
-        echo "Waiting for X server..."
+        log_message "Waiting for X server..."
         sleep 2
     done
+
     setup_display
-    sleep 10
+    sleep 10  # small buffer for desktop to fully load
     start_firefox
-    
+
+    # Convert interval to seconds
     SLEEP_SECONDS=$(parse_interval "$RESTART_INTERVAL")
-    
-    # Wait for the interval, then reboot
+
+    # Main loop: wait interval then reboot
     while true; do
         log_message "Next system reboot in $RESTART_INTERVAL"
         sleep "$SLEEP_SECONDS"
