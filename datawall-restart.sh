@@ -64,26 +64,27 @@ click_dashboard_button() {
     log_message "Clicking dashboard button ${DASHBOARD_SELECTION}..."
     
     # Click based on button position
-    # Buttons appear to be centered on page, adjusted for actual layout
+    # Buttons occupy the top 5/8ths (62.5%) of screen, divided into 3 equal sections
+    # Each button is approximately 20.83% of screen height (62.5% / 3)
     case $DASHBOARD_SELECTION in
         1)
             # Top button - "Single CNC Dashboard"
-            # Click at 22% from top (higher on screen)
-            CLICK_Y=$((SCREEN_HEIGHT * 22 / 100))
+            # Click in middle of first section (at 10.4% from top)
+            CLICK_Y=$((SCREEN_HEIGHT * 104 / 1000))
             xdotool mousemove $CENTER_X $CLICK_Y click 1
             log_message "Clicked top dashboard button at ($CENTER_X, $CLICK_Y)"
             ;;
         2)
             # Middle button - "Horseshoe Cell Dashboard"
-            # Click at exact center
-            CLICK_Y=$((SCREEN_HEIGHT / 2))
+            # Click in middle of second section (at 31.25% from top)
+            CLICK_Y=$((SCREEN_HEIGHT * 3125 / 10000))
             xdotool mousemove $CENTER_X $CLICK_Y click 1
             log_message "Clicked middle dashboard button at ($CENTER_X, $CLICK_Y)"
             ;;
         3)
             # Bottom button - "UMC350-HD Cell"
-            # Click at 78% from top (below center)
-            CLICK_Y=$((SCREEN_HEIGHT * 78 / 100))
+            # Click in middle of third section (at 52% from top)
+            CLICK_Y=$((SCREEN_HEIGHT * 52 / 100))
             xdotool mousemove $CENTER_X $CLICK_Y click 1
             log_message "Clicked bottom dashboard button at ($CENTER_X, $CLICK_Y)"
             ;;
