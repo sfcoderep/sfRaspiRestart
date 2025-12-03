@@ -15,8 +15,8 @@ fi
 # Default values if not set in config
 DASHBOARD_URL="${DASHBOARD_URL:-http://localhost:8088}"
 RESTART_INTERVAL="${RESTART_INTERVAL:-4h}"
-DASHBOARD_SELECTION="${DASHBOARD_SELECTION:-1}"  # Which button to click (1, 2, or 3)
-BUTTON_WAIT_TIME="${BUTTON_WAIT_TIME:-10}"  # Seconds to wait before clicking
+DASHBOARD_SELECTION="${DASHBOARD_SELECTION:-1}"
+BUTTON_WAIT_TIME="${BUTTON_WAIT_TIME:-10}"
 
 log_message() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "$LOG_FILE"
@@ -45,36 +45,59 @@ click_dashboard_button() {
     log_message "Waiting ${BUTTON_WAIT_TIME} seconds for page to load..."
     sleep "$BUTTON_WAIT_TIME"
     
+    # Get screen resolution
+    SCREEN_INFO=$(xdotool getdisplaygeometry 2>/dev/null)
+    if [ -n "$SCREEN_INFO" ]; then
+        SCREEN_WIDTH=$(echo $SCREEN_INFO | awk '{print $1}')
+        SCREEN_HEIGHT=$(echo $SCREEN_INFO | awk '{print $2}')
+    else
+        # Fallback to common resolution if detection fails
+        SCREEN_WIDTH=1920
+        SCREEN_HEIGHT=1080
+        log_message "Could not detect screen resolution, using fallback: ${SCREEN_WIDTH}x${SCREEN_HEIGHT}"
+    fi
+    
+    # Calculate center X position
+    CENTER_X=$((SCREEN_WIDTH / 2))
+    
+    log_message "Screen resolution: ${SCREEN_WIDTH}x${SCREEN_HEIGHT}"
     log_message "Clicking dashboard button ${DASHBOARD_SELECTION}..."
     
-    # Move mouse to center of screen first
-    xdotool mousemove 960 540
-    
-    # Click based on button position (adjust Y coordinates as needed)
+    # Click based on button position
     case $DASHBOARD_SELECTION in
         1)
-            # Top button - click upper third of screen
-            xdotool mousemove 960 300 click 1
-            log_message "Clicked top dashboard button"
+            # Top button - upper third of screen
+            CLICK_Y=$((SCREEN_HEIGHT / 4))
+            xdotool mousemove $CENTER_X $CLICK_Y click 1
+            log_message "Clicked top dashboard button at ($CENTER_X, $CLICK_Y)"
             ;;
         2)
-            # Middle button - click center of screen
-            xdotool mousemove 960 540 click 1
-            log_message "Clicked middle dashboard button"
+            # Middle button - center of screen
+            CLICK_Y=$((SCREEN_HEIGHT / 2))
+            xdotool mousemove $CENTER_X $CLICK_Y click 1
+            log_message "Clicked middle dashboard button at ($CENTER_X, $CLICK_Y)"
             ;;
         3)
-            # Bottom button - click lower third of screen
-            xdotool mousemove 960 780 click 1
-            log_message "Clicked bottom dashboard button"
+            # Bottom button - lower third of screen
+            CLICK_Y=$((SCREEN_HEIGHT * 3 / 4))
+            xdotool mousemove $CENTER_X $CLICK_Y click 1
+            log_message "Clicked bottom dashboard button at ($CENTER_X, $CLICK_Y)"
             ;;
         *)
             log_message "Invalid DASHBOARD_SELECTION: $DASHBOARD_SELECTION (use 1, 2, or 3)"
             ;;
     esac
     
-    # Make sure we're still fullscreen after click
-    sleep 1
-    xdotool key F11
+    # Ensure still fullscreen after click
+    sleep 2
+    FIREFOX_WINDOW=$(xdotool search --name "Firefox" 2>/dev/null | head -1)
+    if [ -n "$FIREFOX_WINDOW" ]; then
+        xdotool windowactivate "$FIREFOX_WINDOW"
+        sleep 0.5
+        xdotool key --window "$FIREFOX_WINDOW" F11
+        sleep 0.5
+        xdotool key --window "$FIREFOX_WINDOW" F11
+    fi
 }
 
 start_firefox() {
@@ -103,13 +126,23 @@ start_firefox() {
     if [ -n "$FIREFOX_WINDOW" ]; then
         log_message "Firefox window ID: $FIREFOX_WINDOW"
         
-        # Maximize and make fullscreen
+        # Activate window
         xdotool windowactivate "$FIREFOX_WINDOW"
         sleep 1
+        
+        # Move to 0,0 and maximize
+        xdotool windowmove "$FIREFOX_WINDOW" 0 0
+        sleep 0.5
         xdotool windowsize "$FIREFOX_WINDOW" 100% 100%
         sleep 1
+        
+        # Press F11 to toggle fullscreen (works better than --kiosk sometimes)
         xdotool key --window "$FIREFOX_WINDOW" F11
         sleep 1
+        
+        # Verify fullscreen with another F11 toggle
+        xdotool key --window "$FIREFOX_WINDOW" F11
+        sleep 0.5
         xdotool key --window "$FIREFOX_WINDOW" F11
         
         log_message "Firefox maximized and set to fullscreen"
