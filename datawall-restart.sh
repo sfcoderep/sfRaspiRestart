@@ -163,11 +163,14 @@ start_firefox() {
 }
 
 restart_cycle() {
-    setup_display
-    kill_firefox
-    sleep 3
-    start_firefox
-    log_message "Restart cycle complete. Next restart in $RESTART_INTERVAL"
+    log_message "Starting restart cycle - will reboot system in 10 seconds"
+    
+    # Give time for log to be written
+    sleep 10
+    
+    # Reboot the Raspberry Pi
+    log_message "Rebooting Raspberry Pi now..."
+    sudo reboot
 }
 
 # Parse interval to seconds for sleep
@@ -190,11 +193,18 @@ main() {
     log_message "Restart interval: $RESTART_INTERVAL"
     log_message "Dashboard selection: Button $DASHBOARD_SELECTION"
     
+    # On first start, launch Firefox immediately
+    setup_display
+    sleep 5
+    start_firefox
+    
     SLEEP_SECONDS=$(parse_interval "$RESTART_INTERVAL")
     
+    # Wait for the interval, then reboot
     while true; do
-        restart_cycle
+        log_message "Next system reboot in $RESTART_INTERVAL"
         sleep "$SLEEP_SECONDS"
+        restart_cycle
     done
 }
 
