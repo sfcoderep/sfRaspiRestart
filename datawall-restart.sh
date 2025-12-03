@@ -114,9 +114,9 @@ start_firefox() {
 
     log_message "Firefox started (PID: $FIREFOX_PID), waiting for window to appear..."
 
-    # Wait until the newest Firefox window appears (up to 20 seconds)
+    # Wait up to 20s for newest Firefox window
     for i in {1..20}; do
-        FIREFOX_WINDOW=$(xdotool search --name "Firefox" | tail -1)
+        FIREFOX_WINDOW=$(xdotool search --name "Firefox" | tail -1 2>/dev/null)
         if [ -n "$FIREFOX_WINDOW" ]; then
             log_message "Firefox window detected after $i seconds (ID: $FIREFOX_WINDOW)"
             break
@@ -126,15 +126,19 @@ start_firefox() {
 
     if [ -z "$FIREFOX_WINDOW" ]; then
         log_message "Warning: Could not find Firefox window"
-        return
+        return 1
     fi
 
-    # Activate window and ensure fullscreen
+    # Activate and layout window
     xdotool windowactivate "$FIREFOX_WINDOW"
     sleep 1
     xdotool windowmove "$FIREFOX_WINDOW" 0 0
     sleep 0.5
     xdotool windowsize "$FIREFOX_WINDOW" 100% 100%
+    sleep 0.5
+
+    # Toggle F11 a few times to force fullscreen
+    xdotool key --window "$FIREFOX_WINDOW" F11
     sleep 0.5
     xdotool key --window "$FIREFOX_WINDOW" F11
     sleep 0.5
@@ -142,11 +146,10 @@ start_firefox() {
 
     log_message "Firefox maximized and set to fullscreen"
 
-    # Hide cursor
-    unclutter -idle 0.1 -root &
-
-    # Auto-click the dashboard button
+    # Click the dashboard button
     click_dashboard_button
+
+    return 0
 }
 
 restart_cycle() {
@@ -187,8 +190,29 @@ main() {
     done
 
     setup_display
-    sleep 60  # small buffer for desktop to fully load
-    start_firefox
+
+    # small buffer for desktop to fully load
+    sleep 5
+
+    # bootMarker ensures we only perform the dumb restart once per physical boot
+    BOOT_MARKER="/run/datawall-first-run"
+
+    if [ ! -e "$BOOT_MARKER" ]; then
+        # First run after boot: create marker, run firefox, then force service restart (dumb mode)
+        touch "$BOOT_MARKER"
+        start_firefox
+
+        log_message "First-run dumb mode: killing Firefox and restarting service to ensure WM readiness"
+        pkill -f firefox || true
+        sleep 2
+
+        # restart the systemd unit so systemd restarts the script within the GUI session
+        systemctl restart datawall-restart.service
+        exit 0
+    else
+        # Normal run after first restart: start firefox and continue
+        start_firefox
+    fi
 
     # Convert interval to seconds
     SLEEP_SECONDS=$(parse_interval "$RESTART_INTERVAL")
@@ -200,5 +224,3 @@ main() {
         restart_cycle
     done
 }
-
-main
