@@ -1,6 +1,5 @@
 #!/bin/bash
-# datawall-restart.sh - Main script for datawall management
-# Implements: start -> kill -> start -> click -> wait -> reboot
+# datawall-restart.sh - Datawall auto-restart script
 
 CONFIG_FILE="/etc/datawall.conf"
 LOG_FILE="/var/log/datawall-restart.log"
@@ -17,7 +16,7 @@ fi
 DASHBOARD_URL="${DASHBOARD_URL:-http://localhost:8088}"
 RESTART_INTERVAL="${RESTART_INTERVAL:-4h}"
 DASHBOARD_SELECTION="${DASHBOARD_SELECTION:-1}"
-BUTTON_WAIT_TIME="${BUTTON_WAIT_TIME:-10}"
+BUTTON_WAIT_TIME="${BUTTON_WAIT_TIME:-30}"
 
 log_message() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "$LOG_FILE"
@@ -32,14 +31,13 @@ setup_display() {
     else
         export XAUTHORITY=$HOME/.Xauthority
     fi
-    export XDG_RUNTIME_DIR="/run/user/$(id -u)"
 }
 
 kill_firefox() {
     log_message "Stopping Firefox..."
-    pkill -f firefox >/dev/null 2>&1 || true
+    pkill -f firefox || true
     sleep 2
-    pkill -9 -f firefox >/dev/null 2>&1 || true
+    pkill -9 -f firefox || true
 }
 
 click_dashboard_button() {
@@ -53,42 +51,19 @@ click_dashboard_button() {
     else
         SCREEN_WIDTH=1920
         SCREEN_HEIGHT=1080
-        log_message "Could not detect screen resolution, using fallback: ${SCREEN_WIDTH}x${SCREEN_HEIGHT}"
+        log_message "Fallback screen resolution: ${SCREEN_WIDTH}x${SCREEN_HEIGHT}"
     fi
 
     CENTER_X=$((SCREEN_WIDTH / 2))
-    log_message "Screen resolution: ${SCREEN_WIDTH}x${SCREEN_HEIGHT}"
-    log_message "Clicking dashboard button ${DASHBOARD_SELECTION}..."
-
     case $DASHBOARD_SELECTION in
-        1)
-            CLICK_Y=$((SCREEN_HEIGHT * 104 / 1000))
-            ;;
-        2)
-            CLICK_Y=$((SCREEN_HEIGHT * 3125 / 10000))
-            ;;
-        3)
-            CLICK_Y=$((SCREEN_HEIGHT * 52 / 100))
-            ;;
-        *)
-            log_message "Invalid DASHBOARD_SELECTION: $DASHBOARD_SELECTION (use 1,2,3)"
-            return 1
-            ;;
+        1) CLICK_Y=$((SCREEN_HEIGHT * 104 / 1000)) ;;
+        2) CLICK_Y=$((SCREEN_HEIGHT * 3125 / 10000)) ;;
+        3) CLICK_Y=$((SCREEN_HEIGHT * 52 / 100)) ;;
+        *) CLICK_Y=$((SCREEN_HEIGHT * 104 / 1000)) ;;
     esac
 
-    xdotool mousemove "$CENTER_X" "$CLICK_Y" click 1
-    log_message "Clicked dashboard button at ($CENTER_X, $CLICK_Y)"
-
-    # small confirm fullscreen toggle to keep window focused
-    sleep 1
-    FIREFOX_WINDOW=$(xdotool search --name "Firefox" 2>/dev/null | tail -1)
-    if [ -n "$FIREFOX_WINDOW" ]; then
-        xdotool windowactivate "$FIREFOX_WINDOW"
-        sleep 0.5
-        xdotool key --window "$FIREFOX_WINDOW" F11
-        sleep 0.3
-        xdotool key --window "$FIREFOX_WINDOW" F11
-    fi
+    log_message "Clicking dashboard button ${DASHBOARD_SELECTION} at ($CENTER_X, $CLICK_Y)"
+    xdotool mousemove $CENTER_X $CLICK_Y click 1
 }
 
 start_firefox() {
@@ -96,44 +71,32 @@ start_firefox() {
     firefox --kiosk "$DASHBOARD_URL" &
     FIREFOX_PID=$!
     log_message "Firefox started (PID: $FIREFOX_PID), waiting for window..."
-
-    # Wait for newest firefox window
-    for i in {1..30}; do
-        FIREFOX_WINDOW=$(xdotool search --name "Firefox" 2>/dev/null | tail -1)
-        if [ -n "$FIREFOX_WINDOW" ]; then
-            log_message "Firefox window detected (ID: $FIREFOX_WINDOW) after ${i}s"
+    for i in {1..20}; do
+        if xdotool search --name "Firefox" &>/dev/null; then
+            log_message "Firefox window detected after $i seconds"
             break
         fi
-        sleep 1
+        sleep 0.5
     done
 
-    if [ -z "$FIREFOX_WINDOW" ]; then
+    FIREFOX_WINDOW=$(xdotool search --name "Firefox" | head -1)
+    if [ -n "$FIREFOX_WINDOW" ]; then
+        xdotool windowactivate "$FIREFOX_WINDOW"
+        xdotool windowmove "$FIREFOX_WINDOW" 0 0
+        xdotool windowsize "$FIREFOX_WINDOW" 100% 100%
+        xdotool key --window "$FIREFOX_WINDOW" F11
+    else
         log_message "Warning: Firefox window not found"
-        return 1
     fi
 
-    # Bring to front and maximize / fullscreen aggressively
-    xdotool windowactivate "$FIREFOX_WINDOW"
-    sleep 1
-    xdotool windowmove "$FIREFOX_WINDOW" 0 0
-    sleep 0.3
-    xdotool windowsize "$FIREFOX_WINDOW" 100% 100%
-    sleep 0.3
-    xdotool key --window "$FIREFOX_WINDOW" F11
-    sleep 0.3
-    xdotool key --window "$FIREFOX_WINDOW" F11
-    sleep 0.3
-    xdotool key --window "$FIREFOX_WINDOW" F11
-
-    log_message "Attempted to set Firefox fullscreen"
-    return 0
+    click_dashboard_button
+    unclutter -idle 0.1 -root &
 }
 
 restart_cycle() {
-    log_message "Starting restart cycle - will reboot system in 15 seconds"
+    log_message "Rebooting system in 15 seconds..."
     sleep 15
-    log_message "Rebooting Raspberry Pi now..."
-    sudo /usr/sbin/reboot
+    sudo reboot
 }
 
 parse_interval() {
@@ -150,40 +113,31 @@ parse_interval() {
 
 main() {
     log_message "Datawall restart service started"
-    log_message "Restart interval: $RESTART_INTERVAL"
-    log_message "Dashboard selection: Button $DASHBOARD_SELECTION"
+    log_message "Dashboard selection: $DASHBOARD_SELECTION"
 
-    # Wait until X server is ready
     while ! xdotool getdisplaygeometry &>/dev/null; do
         log_message "Waiting for X server..."
         sleep 2
     done
 
     setup_display
-    sleep 5
 
-    # --- required dumb sequence: start, kill, start ---
-    log_message "FIRST START of Firefox (expected to possibly fail fullscreen)"
+    BOOT_MARKER="/run/datawall-first-run"
+
+    if [ ! -e "$BOOT_MARKER" ]; then
+        log_message "First boot detected, performing dumb Firefox restart..."
+        touch "$BOOT_MARKER"
+        start_firefox
+        kill_firefox
+        log_message "Restarting datawall-restart.service (dumb mode)"
+        systemctl restart datawall-restart.service
+        exit 0
+    fi
+
+    # Normal run: start Firefox and continue
     start_firefox
-    sleep 2
-
-    log_message "KILLING Firefox to reset fullscreen state"
-    kill_firefox
-    sleep 4
-
-    log_message "SECOND START of Firefox (expected to be correct fullscreen)"
-    start_firefox
-    sleep 3
-
-    # launch unclutter to hide cursor (background)
-    unclutter -idle 0.1 -root >/dev/null 2>&1 &
-
-    # now perform normal click flow
-    click_dashboard_button
 
     SLEEP_SECONDS=$(parse_interval "$RESTART_INTERVAL")
-
-    # Main loop: wait interval then reboot
     while true; do
         log_message "Next system reboot in $RESTART_INTERVAL"
         sleep "$SLEEP_SECONDS"
