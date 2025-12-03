@@ -107,57 +107,44 @@ click_dashboard_button() {
 
 start_firefox() {
     log_message "Starting Firefox with URL: $DASHBOARD_URL"
-    
+
     # Launch Firefox in kiosk mode
     firefox --kiosk "$DASHBOARD_URL" &
     FIREFOX_PID=$!
-    
+
     log_message "Firefox started (PID: $FIREFOX_PID), waiting for window to appear..."
-    
-    # Wait for Firefox window to appear (up to 10 seconds)
+
+    # Wait until the newest Firefox window appears (up to 20 seconds)
     for i in {1..20}; do
-        if xdotool search --name "Firefox" > /dev/null 2>&1; then
-            log_message "Firefox window detected after $i seconds"
+        FIREFOX_WINDOW=$(xdotool search --name "Firefox" | tail -1)
+        if [ -n "$FIREFOX_WINDOW" ]; then
+            log_message "Firefox window detected after $i seconds (ID: $FIREFOX_WINDOW)"
             break
         fi
-        sleep 0.5
+        sleep 1
     done
-    
-    sleep 2
-    
-    # Get Firefox window ID
-    FIREFOX_WINDOW=$(xdotool search --name "Firefox" | head -1)
-    
-    if [ -n "$FIREFOX_WINDOW" ]; then
-        log_message "Firefox window ID: $FIREFOX_WINDOW"
-        
-        # Activate window
-        xdotool windowactivate "$FIREFOX_WINDOW"
-        sleep 1
-        
-        # Move to 0,0 and maximize
-        xdotool windowmove "$FIREFOX_WINDOW" 0 0
-        sleep 0.5
-        xdotool windowsize "$FIREFOX_WINDOW" 100% 100%
-        sleep 1
-        
-        # Press F11 to toggle fullscreen (works better than --kiosk sometimes)
-        xdotool key --window "$FIREFOX_WINDOW" F11
-        sleep 1
-        
-        # Verify fullscreen with another F11 toggle
-        xdotool key --window "$FIREFOX_WINDOW" F11
-        sleep 0.5
-        xdotool key --window "$FIREFOX_WINDOW" F11
-        
-        log_message "Firefox maximized and set to fullscreen"
-    else
+
+    if [ -z "$FIREFOX_WINDOW" ]; then
         log_message "Warning: Could not find Firefox window"
+        return
     fi
-    
+
+    # Activate window and ensure fullscreen
+    xdotool windowactivate "$FIREFOX_WINDOW"
+    sleep 1
+    xdotool windowmove "$FIREFOX_WINDOW" 0 0
+    sleep 0.5
+    xdotool windowsize "$FIREFOX_WINDOW" 100% 100%
+    sleep 0.5
+    xdotool key --window "$FIREFOX_WINDOW" F11
+    sleep 0.5
+    xdotool key --window "$FIREFOX_WINDOW" F11
+
+    log_message "Firefox maximized and set to fullscreen"
+
     # Hide cursor
     unclutter -idle 0.1 -root &
-    
+
     # Auto-click the dashboard button
     click_dashboard_button
 }
@@ -200,7 +187,7 @@ main() {
     done
 
     setup_display
-    sleep 10  # small buffer for desktop to fully load
+    sleep 60  # small buffer for desktop to fully load
     start_firefox
 
     # Convert interval to seconds
