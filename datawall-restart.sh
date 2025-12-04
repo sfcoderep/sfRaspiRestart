@@ -213,9 +213,18 @@ main() {
     log_message "Restart interval: $RESTART_INTERVAL"
     log_message "Dashboard selection: Button $DASHBOARD_SELECTION"
     
+    # Check if this is a fresh boot (system uptime less than 2 minutes)
+    UPTIME_SECONDS=$(awk '{print int($1)}' /proc/uptime)
+    if [ "$UPTIME_SECONDS" -lt 120 ]; then
+        log_message "Fresh boot detected (uptime: ${UPTIME_SECONDS}s) - waiting 30 seconds for desktop environment..."
+        sleep 30
+    else
+        log_message "Service restart detected (uptime: ${UPTIME_SECONDS}s) - no delay needed"
+        sleep 5
+    fi
+    
     # On first start, launch Firefox immediately
     setup_display
-    sleep 5
     start_firefox
     
     SLEEP_SECONDS=$(parse_interval "$RESTART_INTERVAL")

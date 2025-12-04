@@ -2,13 +2,15 @@
 Description=Datawall Auto-Restart Service
 After=graphical.target network-online.target
 Wants=graphical.target network-online.target
+# Extra delay to ensure desktop is fully loaded
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
 User=admin
 Environment="DISPLAY=:0"
 Environment="XAUTHORITY=/home/admin/.Xauthority"
-Environment="XDG_RUNTIME_DIR=/run/user/1000"
+ExecStartPre=/bin/sleep 10
 ExecStart=/opt/datawall/datawall-restart.sh
 Restart=always
 RestartSec=10
