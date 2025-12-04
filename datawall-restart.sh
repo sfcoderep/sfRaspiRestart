@@ -39,6 +39,12 @@ kill_firefox() {
     pkill -f firefox || true
     sleep 2
     pkill -9 -f firefox || true
+    
+    # Clean up any leftover Firefox lock files
+    rm -rf /home/admin/.mozilla/firefox/*.default-esr/.parentlock 2>/dev/null || true
+    rm -rf /home/pi/.mozilla/firefox/*.default-esr/.parentlock 2>/dev/null || true
+    
+    sleep 1
 }
 
 click_dashboard_button() {
@@ -109,30 +115,42 @@ start_firefox() {
     log_message "Starting Firefox with URL: $DASHBOARD_URL"
     
     # Launch Firefox in kiosk mode
-    firefox --kiosk "$DASHBOARD_URL" &
+    firefox --kiosk --new-instance "$DASHBOARD_URL" &
     FIREFOX_PID=$!
     
     log_message "Firefox started (PID: $FIREFOX_PID), waiting for window to appear..."
     
     # Wait for Firefox window to appear (up to 10 seconds)
+    WINDOW_FOUND=false
     for i in {1..20}; do
         if xdotool search --name "Firefox" > /dev/null 2>&1; then
             log_message "Firefox window detected after $i seconds"
+            WINDOW_FOUND=true
             break
         fi
         sleep 0.5
     done
     
-    sleep 2
+    if [ "$WINDOW_FOUND" = false ]; then
+        log_message "Warning: Firefox window not detected after 10 seconds"
+        return
+    fi
     
-    # Get Firefox window ID
-    FIREFOX_WINDOW=$(xdotool search --name "Firefox" | head -1)
+    sleep 3
+    
+    # Get the MAIN Firefox window ID (usually the first/oldest one)
+    FIREFOX_WINDOW=$(xdotool search --pid $FIREFOX_PID --name "Firefox" | head -1)
+    
+    if [ -z "$FIREFOX_WINDOW" ]; then
+        # Fallback: get any Firefox window
+        FIREFOX_WINDOW=$(xdotool search --name "Firefox" | head -1)
+    fi
     
     if [ -n "$FIREFOX_WINDOW" ]; then
-        log_message "Firefox window ID: $FIREFOX_WINDOW"
+        log_message "Firefox window ID: $FIREFOX_WINDOW (PID: $FIREFOX_PID)"
         
-        # Activate window
-        xdotool windowactivate "$FIREFOX_WINDOW"
+        # Activate and focus the window
+        xdotool windowactivate --sync "$FIREFOX_WINDOW"
         sleep 1
         
         # Move to 0,0 and maximize
@@ -141,14 +159,13 @@ start_firefox() {
         xdotool windowsize "$FIREFOX_WINDOW" 100% 100%
         sleep 1
         
-        # Press F11 to toggle fullscreen (works better than --kiosk sometimes)
+        # Force focus again before F11
+        xdotool windowactivate --sync "$FIREFOX_WINDOW"
+        sleep 0.5
+        
+        # Press F11 to enter fullscreen
         xdotool key --window "$FIREFOX_WINDOW" F11
         sleep 1
-        
-        # Verify fullscreen with another F11 toggle
-        xdotool key --window "$FIREFOX_WINDOW" F11
-        sleep 0.5
-        xdotool key --window "$FIREFOX_WINDOW" F11
         
         log_message "Firefox maximized and set to fullscreen"
     else
@@ -164,6 +181,9 @@ start_firefox() {
 
 restart_cycle() {
     log_message "Starting restart cycle - will reboot system in 10 seconds"
+    
+    # Kill Firefox before reboot to prevent lock files
+    kill_firefox
     
     # Give time for log to be written
     sleep 10
@@ -192,29 +212,15 @@ main() {
     log_message "Datawall restart service started"
     log_message "Restart interval: $RESTART_INTERVAL"
     log_message "Dashboard selection: Button $DASHBOARD_SELECTION"
-
+    
+    # On first start, launch Firefox immediately
     setup_display
     sleep 5
-
-    # Counter for first-run logic
-    firstRunCounter=1
-
-    # Launch Firefox the first time
     start_firefox
-
-    # If this is the first run, kill and restart Firefox
-    if [ "$firstRunCounter" -eq 1 ]; then
-        log_message "First-run dumb restart: killing Firefox and starting again"
-        kill_firefox
-        sleep 2
-        start_firefox
-        firstRunCounter=$((firstRunCounter + 1))
-    fi
-
-    # Convert interval to seconds
+    
     SLEEP_SECONDS=$(parse_interval "$RESTART_INTERVAL")
-
-    # Main loop: wait interval then reboot
+    
+    # Wait for the interval, then reboot
     while true; do
         log_message "Next system reboot in $RESTART_INTERVAL"
         sleep "$SLEEP_SECONDS"
@@ -223,4 +229,3 @@ main() {
 }
 
 main
-
